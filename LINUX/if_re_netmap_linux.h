@@ -38,7 +38,7 @@
 #include <netmap/netmap_kern.h>
 
 
-static void rtl8169_wait_for_quiescence(struct ifnet *);
+/*static void rtl8169_wait_for_quiescence(struct ifnet *);*/
 #define SOFTC_T	rtl8169_private
 
 
@@ -52,21 +52,21 @@ re_netmap_reg(struct netmap_adapter *na, int onoff)
 	int error = 0;
 
 	rtnl_lock();
-	rtl8169_wait_for_quiescence(ifp);
+	/*rtl8169_wait_for_quiescence(ifp);*/
 	rtl8169_close(ifp);
 
 	/* enable or disable flags and callbacks in na and ifp */
 	if (onoff) {
 		nm_set_native_flags(na);
 
-		if (rtl8169_open(ifp) < 0) {
+		if (rtl_open(ifp) < 0) {
 			error = ENOMEM;
 			goto fail;
 		}
 	} else {
 fail:
 		nm_clear_native_flags(na);
-		error = rtl8169_open(ifp) ? EINVAL : 0;
+		error = rtl_open(ifp) ? EINVAL : 0;
 	}
 	rtnl_unlock();
 	return (error);

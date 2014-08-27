@@ -1,0 +1,120 @@
+--- ./r8169.c 2014-03-24 12:45:42.000000000 +0800
++++ ./r8169.bk.c  2014-05-29 14:03:42.489702302 +0800
+@@ -925,6 +925,12 @@
+  return RTL_R32(OCPAR) & OCPAR_FLAG;
+ }
+
++#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
++static int rtl_open(struct net_device *dev);
++static int rtl8169_close(struct net_device *dev);
++#include <if_re_netmap_linux.h>
++#endif
++
+ static u32 ocp_read(struct rtl8169_private *tp, u8 mask, u16 reg)
+ {
+  void __iomem *ioaddr = tp->mmio_addr;
+@@ -5771,6 +5777,12 @@
+ {
+  unsigned int i;
+
++#ifdef DEV_NETMAP
++ re_netmap_tx_init(tp);
++ if (re_netmap_rx_init(tp))
++   return 0; // success
++#endif /* DEV_NETMAP */
++
+  for (i = 0; i < NUM_RX_DESC; i++) {
+    void *data;
+
+@@ -5854,6 +5866,11 @@
+  int i;
+
+  napi_disable(&tp->napi);
++
++#ifdef DEV_NETMAP
++ netmap_disable_all_rings(dev);
++#endif /* DEV_NETMAP */
++
+  netif_stop_queue(dev);
+  synchronize_sched();
+
+@@ -5866,6 +5883,11 @@
+  rtl8169_init_ring_indexes(tp);
+
+  napi_enable(&tp->napi);
++
++#ifdef DEV_NETMAP
++ netmap_enable_all_rings(dev);
++#endif /* DEV_NETMAP */
++
+  rtl_hw_start(dev);
+  netif_wake_queue(dev);
+  rtl8169_check_link_status(dev, tp, tp->mmio_addr);
+@@ -6122,6 +6144,11 @@
+ {
+  unsigned int dirty_tx, tx_left;
+
++#ifdef DEV_NETMAP
++ if (netmap_tx_irq(dev, 0))
++   return;
++#endif /* DEV_NETMAP */
++
+  dirty_tx = tp->dirty_tx;
+  smp_rmb();
+  tx_left = tp->cur_tx - dirty_tx;
+@@ -6218,6 +6245,11 @@
+  unsigned int cur_rx, rx_left;
+  unsigned int count;
+
++#ifdef DEV_NETMAP
++ if (netmap_rx_irq(dev, 0, &count))
++       return count;
++#endif /* DEV_NETMAP */
++
+  cur_rx = tp->cur_rx;
+
+  for (rx_left = min(budget, NUM_RX_DESC); rx_left > 0; rx_left--, cur_rx++) {
+@@ -6439,6 +6471,11 @@
+  del_timer_sync(&tp->timer);
+
+  napi_disable(&tp->napi);
++
++#ifdef DEV_NETMAP
++ netmap_disable_all_rings(dev);
++#endif /* DEV_NETMAP */
++
+  netif_stop_queue(dev);
+
+  rtl8169_hw_reset(tp);
+@@ -6544,6 +6581,10 @@
+  set_bit(RTL_FLAG_TASK_ENABLED, tp->wk.flags);
+
+  napi_enable(&tp->napi);
++
++#ifdef DEV_NETMAP
++ netmap_enable_all_rings(dev);
++#endif /* DEV_NETMAP */
+
+  rtl8169_init_phy(dev, tp);
+
+@@ -6807,6 +6848,9 @@
+  unregister_netdev(dev);
+
+  rtl_release_firmware(tp);
++#ifdef DEV_NETMAP
++ netmap_detach(dev);
++#endif /* DEV_NETMAP */
+
+  if (pci_dev_run_wake(pdev))
+    pm_runtime_get_noresume(&pdev->dev);
+@@ -7186,6 +7230,10 @@
+  if (pci_dev_run_wake(pdev))
+    pm_runtime_put_noidle(&pdev->dev);
+
++#ifdef DEV_NETMAP
++ re_netmap_attach(tp);
++#endif /* DEV_NETMAP */
++
+  netif_carrier_off(dev);
+
+ out:
